@@ -12,8 +12,12 @@ export class RatingsController {
   @Post()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  create(@Request() req, @Body() createRatingDto: CreateRatingDto) {
-    return this.ratingsService.create(createRatingDto, req.user.userId);
+  create(
+    @Request() req: { user: { userId: string } },
+    @Body() createRatingDto: CreateRatingDto,
+  ) {
+    const uid = Number.parseInt(req.user.userId, 10);
+    return this.ratingsService.create(createRatingDto, uid);
   }
 
   @Get('project/:projectId')

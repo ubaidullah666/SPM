@@ -1,140 +1,123 @@
 /**
- * Seed script — creates demo accounts and sample projects.
- * Run with: npx ts-node src/seed.ts
+ * Seed script — demo NGO, volunteer, and sample projects.
+ * Run: cd backend && npm run seed
+ * Requires Postgres running and DATABASE_* or DATABASE_URL.
  */
-import mongoose from 'mongoose';
 import * as bcrypt from 'bcryptjs';
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/social-impact';
-
-const UserSchema = new mongoose.Schema({
-  name: String, email: String, password: String, role: String,
-  bio: String, skills: [String], totalHours: Number, impactScore: Number,
-  organizationName: String, isActive: Boolean,
-}, { timestamps: true });
-
-const ProjectSchema = new mongoose.Schema({
-  title: String, description: String, category: String,
-  ngoId: mongoose.Schema.Types.ObjectId, ngoName: String,
-  requiredSkills: [String], location: String, isRemote: Boolean,
-  status: String, volunteersNeeded: Number, volunteersAccepted: Number,
-  estimatedHours: Number, totalApplications: Number, isActive: Boolean,
-}, { timestamps: true });
+import { DataSource } from 'typeorm';
+import { UserEntity } from './entities/user.entity';
+import { NgoEntity } from './entities/ngo.entity';
+import { ProjectEntity } from './entities/project.entity';
 
 async function seed() {
-  await mongoose.connect(MONGODB_URI);
-  console.log('Connected to MongoDB');
+  const databaseUrl = process.env.DATABASE_URL;
 
-  const User = mongoose.model('User', UserSchema);
-  const Project = mongoose.model('Project', ProjectSchema);
+  const common = {
+    entities: [UserEntity, NgoEntity, ProjectEntity],
+    synchronize: false,
+  };
 
-  // Clear existing
-  await User.deleteMany({});
-  await Project.deleteMany({});
+  const dataSource = databaseUrl
+    ? new DataSource({
+        type: 'postgres',
+        url: databaseUrl,
+        ...common,
+      })
+    : new DataSource({
+        type: 'postgres',
+        host: process.env.DATABASE_HOST || 'localhost',
+        port: Number.parseInt(process.env.DATABASE_PORT || '5432', 10),
+        username: process.env.DATABASE_USER || 'postgres',
+        password: process.env.DATABASE_PASSWORD || 'postgres',
+        database: process.env.DATABASE_NAME || 'social_impact',
+        ...common,
+      });
 
-  const hash = (pw: string) => bcrypt.hash(pw, 12);
+  await dataSource.initialize();
+  const userRepo = dataSource.getRepository(UserEntity);
+  const ngoRepo = dataSource.getRepository(NgoEntity);
+  const projectRepo = dataSource.getRepository(ProjectEntity);
 
-  // Create demo users
-  const [vol1, vol2, ngo1, ngo2] = await User.insertMany([
-    {
-      name: 'Alex Johnson', email: 'volunteer@demo.com',
-      password: await hash('demo123'), role: 'volunteer',
-      bio: 'Passionate about education and technology',
-      skills: ['Teaching', 'Web Development', 'Design'],
-      totalHours: 45, impactScore: 450, isActive: true,
-    },
-    {
-      name: 'Maria Garcia', email: 'maria@demo.com',
-      password: await hash('demo123'), role: 'volunteer',
-      bio: 'Environmental activist and data analyst',
-      skills: ['Data Analysis', 'Marketing', 'Writing'],
-      totalHours: 30, impactScore: 300, isActive: true,
-    },
-    {
-      name: 'Green Earth Foundation', email: 'ngo@demo.com',
-      password: await hash('demo123'), role: 'ngo',
-      organizationName: 'Green Earth Foundation',
-      bio: 'Fighting climate change through community action',
+  const hash = async (plain: string) => bcrypt.hash(plain, 12);
+
+  let volunteer = await userRepo.findOne({
+    where: { email: 'volunteer@demo.com' },
+  });
+  if (!volunteer) {
+    volunteer = userRepo.create({
+      fullName: 'Demo Volunteer',
+      email: 'volunteer@demo.com',
+      password: await hash('demo123'),
+      role: 'volunteer',
+      skills: ['Teaching', 'Web Development'],
+      bio: 'Demo account',
       isActive: true,
-    },
-    {
-      name: 'EduReach NGO', email: 'edureach@demo.com',
-      password: await hash('demo123'), role: 'ngo',
-      organizationName: 'EduReach NGO',
-      bio: 'Bringing quality education to underserved communities',
-      isActive: true,
-    },
-  ]);
+    });
+    volunteer = await userRepo.save(volunteer);
+    console.info('Created volunteer@demo.com / demo123');
+  }
 
-  // Create sample projects
-  await Project.insertMany([
-    {
-      title: 'Digital Literacy Program for Rural Schools',
-      description: 'Help us teach basic computer skills and internet safety to students in rural areas. Volunteers will create lesson plans and conduct weekly online sessions.',
-      category: 'Education',
-      ngoId: ngo2._id, ngoName: 'EduReach NGO',
-      requiredSkills: ['Teaching', 'Web Development'],
-      location: 'Remote', isRemote: true,
-      status: 'open', volunteersNeeded: 10, volunteersAccepted: 3,
-      estimatedHours: 40, totalApplications: 8, isActive: true,
-    },
-    {
-      title: 'Urban Tree Planting Initiative',
-      description: 'Join our weekend tree planting drives across the city. Help restore green cover and educate communities about environmental conservation.',
-      category: 'Environment',
-      ngoId: ngo1._id, ngoName: 'Green Earth Foundation',
-      requiredSkills: ['Community Organizing'],
-      location: 'New York, USA', isRemote: false,
-      status: 'open', volunteersNeeded: 50, volunteersAccepted: 12,
-      estimatedHours: 20, totalApplications: 25, isActive: true,
-    },
-    {
-      title: 'Mental Health Awareness Campaign',
-      description: 'Create social media content and organize webinars to raise awareness about mental health. We need writers, designers, and social media experts.',
-      category: 'Health',
-      ngoId: ngo1._id, ngoName: 'Green Earth Foundation',
-      requiredSkills: ['Writing', 'Design', 'Marketing'],
-      location: 'Remote', isRemote: true,
-      status: 'open', volunteersNeeded: 8, volunteersAccepted: 2,
-      estimatedHours: 30, totalApplications: 15, isActive: true,
-    },
-    {
-      title: 'Open Source Healthcare App',
-      description: 'Build a mobile app to help rural clinics manage patient records. Looking for React Native developers and UX designers.',
-      category: 'Technology',
-      ngoId: ngo2._id, ngoName: 'EduReach NGO',
-      requiredSkills: ['Web Development', 'Design', 'Data Analysis'],
-      location: 'Remote', isRemote: true,
-      status: 'ongoing', volunteersNeeded: 5, volunteersAccepted: 5,
-      estimatedHours: 100, totalApplications: 20, isActive: true,
-    },
-    {
-      title: 'Food Bank Distribution Network',
-      description: 'Help coordinate food distribution to families in need. Volunteers assist with sorting, packing, and delivering food packages every Saturday.',
-      category: 'Community',
-      ngoId: ngo1._id, ngoName: 'Green Earth Foundation',
-      requiredSkills: ['Community Organizing'],
-      location: 'Los Angeles, USA', isRemote: false,
-      status: 'open', volunteersNeeded: 30, volunteersAccepted: 8,
-      estimatedHours: 15, totalApplications: 18, isActive: true,
-    },
-    {
-      title: 'Youth Photography Workshop',
-      description: 'Teach photography skills to underprivileged youth aged 12-18. Help them express themselves through art and build a portfolio.',
-      category: 'Arts',
-      ngoId: ngo2._id, ngoName: 'EduReach NGO',
-      requiredSkills: ['Photography', 'Teaching'],
-      location: 'Chicago, USA', isRemote: false,
-      status: 'open', volunteersNeeded: 4, volunteersAccepted: 1,
-      estimatedHours: 25, totalApplications: 6, isActive: true,
-    },
-  ]);
+  let ngo = await ngoRepo.findOne({ where: { email: 'ngo@demo.com' } });
+  if (!ngo) {
+    ngo = ngoRepo.create({
+      name: 'Demo NGO',
+      email: 'ngo@demo.com',
+      password: await hash('demo123'),
+      description: 'Demo organization',
+      websiteUrl: 'https://example.org',
+      status: 'active',
+    });
+    ngo = await ngoRepo.save(ngo);
+    console.info('Created ngo@demo.com / demo123');
+  }
 
-  console.log('✅ Seed complete!');
-  console.log('Demo accounts:');
-  console.log('  Volunteer: volunteer@demo.com / demo123');
-  console.log('  NGO:       ngo@demo.com / demo123');
-  await mongoose.disconnect();
+  const existingProjects = await projectRepo.count({
+    where: { ngoId: ngo.id },
+  });
+
+  if (existingProjects === 0) {
+    await projectRepo.save([
+      projectRepo.create({
+        ngoId: ngo.id,
+        title: 'Rural Literacy Program',
+        description:
+          'Teach foundational reading and mathematics to primary students in underserved regions.',
+        category: 'Education',
+        requiredSkills: ['Teaching'],
+        location: 'Remote-friendly',
+        isRemote: true,
+        volunteersNeeded: 15,
+        status: 'open',
+        volunteersAccepted: 0,
+        totalApplications: 0,
+        estimatedHours: 40,
+        isActive: true,
+      }),
+      projectRepo.create({
+        ngoId: ngo.id,
+        title: 'Community Solar Workshop',
+        description:
+          'Hands-on sustainability workshop covering solar installations and carbon literacy.',
+        category: 'Environment',
+        requiredSkills: ['Teaching', 'Data Analysis'],
+        location: 'Portland',
+        isRemote: false,
+        volunteersNeeded: 10,
+        status: 'open',
+        volunteersAccepted: 0,
+        totalApplications: 0,
+        estimatedHours: 24,
+        isActive: true,
+      }),
+    ]);
+    console.info('Created sample projects for Demo NGO.');
+  }
+
+  await dataSource.destroy();
+  console.info('Seed complete.');
 }
 
-seed().catch(console.error);
+seed().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

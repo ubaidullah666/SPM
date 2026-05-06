@@ -10,18 +10,14 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Role } from '../common/enums/role.enum';
-import { UsersService } from '../users/users.service';
 
 @ApiTags('Projects')
 @Controller('projects')
 export class ProjectsController {
-  constructor(
-    private readonly projectsService: ProjectsService,
-    private readonly usersService: UsersService,
-  ) {}
+  constructor(private readonly projectsService: ProjectsService) {}
 
   @Get()
-  findAll(@Query() query: any) {
+  findAll(@Query() query: Record<string, unknown>) {
     return this.projectsService.findAll(query);
   }
 
@@ -34,8 +30,9 @@ export class ProjectsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.NGO)
-  getMyProjects(@Request() req) {
-    return this.projectsService.findByNgo(req.user.userId);
+  getMyProjects(@Request() req: { user: { userId: string } }) {
+    const ngoId = Number.parseInt(req.user.userId, 10);
+    return this.projectsService.findByNgo(ngoId);
   }
 
   @Get(':id')
@@ -47,13 +44,12 @@ export class ProjectsController {
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.NGO)
-  async create(@Request() req, @Body() createProjectDto: CreateProjectDto) {
-    const user = await this.usersService.findById(req.user.userId);
-    return this.projectsService.create(
-      createProjectDto,
-      req.user.userId,
-      user.organizationName || user.name,
-    );
+  create(
+    @Request() req: { user: { userId: string } },
+    @Body() createProjectDto: CreateProjectDto,
+  ) {
+    const ngoId = Number.parseInt(req.user.userId, 10);
+    return this.projectsService.create(createProjectDto, ngoId);
   }
 
   @Put(':id')
@@ -63,16 +59,21 @@ export class ProjectsController {
   update(
     @Param('id') id: string,
     @Body() updateProjectDto: UpdateProjectDto,
-    @Request() req,
+    @Request() req: { user: { userId: string } },
   ) {
-    return this.projectsService.update(id, updateProjectDto, req.user.userId);
+    const ngoId = Number.parseInt(req.user.userId, 10);
+    return this.projectsService.update(id, updateProjectDto, ngoId);
   }
 
   @Delete(':id')
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.NGO)
-  remove(@Param('id') id: string, @Request() req) {
-    return this.projectsService.remove(id, req.user.userId);
+  remove(
+    @Param('id') id: string,
+    @Request() req: { user: { userId: string } },
+  ) {
+    const ngoId = Number.parseInt(req.user.userId, 10);
+    return this.projectsService.remove(id, ngoId);
   }
 }

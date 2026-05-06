@@ -1,82 +1,153 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Contribution, ContributionDocument } from './schemas/contribution.schema';
+import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ContributionEntity } from '../entities/contribution.entity';
 import { CreateContributionDto } from './dto/create-contribution.dto';
-import { UsersService } from '../users/users.service';
+import { ProjectsService } from '../projects/projects.service';
+import { stringId } from '../common/serialize';
 
 @Injectable()
 export class ContributionsService {
   constructor(
-    @InjectModel(Contribution.name)
-    private contributionModel: Model<ContributionDocument>,
-    private usersService: UsersService,
+    @InjectRepository(ContributionEntity)
+    private readonly contributionRepo: Repository<ContributionEntity>,
+    private readonly projectsService: ProjectsService,
   ) {}
 
-  // Calculate impact score based on hours (simple formula)
   private calculateImpactScore(hours: number): number {
     return Math.round(hours * 10);
   }
 
   async create(
     createContributionDto: CreateContributionDto,
-    userId: string,
-  ): Promise<ContributionDocument> {
+    userId: number,
+  ): Promise<Record<string, unknown>> {
     const impactScore = this.calculateImpactScore(createContributionDto.hours);
 
-    const contribution = new this.contributionModel({
-      ...createContributionDto,
-      userId: new Types.ObjectId(userId),
-      projectId: new Types.ObjectId(createContributionDto.projectId),
+    const contribution = this.contributionRepo.create({
+      userId,
+      projectId: Number.parseInt(createContributionDto.projectId, 10),
+      hours: createContributionDto.hours,
       impactScore,
+      taskDescription: createContributionDto.description ?? null,
+      tasksCompleted: createContributionDto.tasksCompleted ?? null,
+      contributionDate: new Date(),
+      verifiedByNgo: false,
     });
 
-    const saved = await contribution.save();
-
-    // Update user stats automatically
-    await this.usersService.updateStats(userId, createContributionDto.hours, impactScore);
-
-    return saved;
+    const saved = await this.contributionRepo.save(contribution);
+    const full = await this.contributionRepo.findOne({
+      where: { id: saved.id },
+      relations: ['project', 'project.ngo'],
+    });
+    return this.serializeContribution(full!);
   }
 
-  async findByUser(userId: string): Promise<ContributionDocument[]> {
-    return this.contributionModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .populate('projectId', 'title category ngoName')
-      .sort({ createdAt: -1 })
-      .exec();
+  private serializeContribution(c: ContributionEntity): Record<string, unknown> {
+    const id = stringId(c.id);
+    const project = c.project;
+    return {
+      _id: id,
+      id,
+      userId: stringId(c.userId),
+      projectId: project
+        ? {
+            _id: stringId(project.id),
+            id: stringId(project.id),
+            title: project.title,
+            category: project.category ?? '',
+            ngoName: project.ngo?.name ?? '',
+          }
+        : { _id: stringId(c.projectId), id: stringId(c.projectId) },
+      hours: c.hours,
+      impactScore: c.impactScore,
+      description: c.taskDescription ?? '',
+      tasksCompleted: c.tasksCompleted ?? [],
+      isVerified: c.verifiedByNgo,
+      createdAt: c.createdAt,
+      contributionDate: c.contributionDate,
+    };
   }
 
-  async findByProject(projectId: string): Promise<ContributionDocument[]> {
-    return this.contributionModel
-      .find({ projectId: new Types.ObjectId(projectId) })
-      .populate('userId', 'name email avatar')
-      .sort({ createdAt: -1 })
-      .exec();
+  async findByUser(userId: number): Promise<Record<string, unknown>[]> {
+    const rows = await this.contributionRepo.find({
+      where: { userId },
+      relations: ['project', 'project.ngo'],
+      order: { createdAt: 'DESC' },
+    });
+    return rows.map((r) => this.serializeContribution(r));
   }
 
-  async verify(id: string, verifierId: string): Promise<ContributionDocument> {
-    const contribution = await this.contributionModel.findById(id);
-    if (!contribution) throw new NotFoundException('Contribution not found');
+  async findByProject(projectId: string): Promise<Record<string, unknown>[]> {
+    const pid = Number.parseInt(projectId, 10);
+    const rows = await this.contributionRepo.find({
+      where: { projectId: pid },
+      relations: ['user', 'project', 'project.ngo'],
+      order: { createdAt: 'DESC' },
+    });
 
-    contribution.isVerified = true;
-    contribution.verifiedBy = new Types.ObjectId(verifierId);
-    return contribution.save();
+    return rows.map((r) => {
+      const base = this.serializeContribution(r);
+      const u = r.user;
+      return {
+        ...base,
+        userId: u
+          ? {
+              _id: stringId(u.id),
+              id: stringId(u.id),
+              name: u.fullName,
+              email: u.email,
+              avatar: u.profileImage ?? '',
+            }
+          : base.userId,
+      };
+    });
   }
 
-  async getUserImpactSummary(userId: string): Promise<any> {
-    const contributions = await this.contributionModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .exec();
+  async verify(id: string, verifierNgoId: number): Promise<Record<string, unknown>> {
+    const contribution = await this.contributionRepo.findOne({
+      where: { id: Number.parseInt(id, 10) },
+      relations: ['project'],
+    });
 
-    const totalHours = contributions.reduce((sum, c) => sum + c.hours, 0);
-    const totalImpact = contributions.reduce((sum, c) => sum + c.impactScore, 0);
-    const projectCount = new Set(contributions.map((c) => c.projectId.toString())).size;
+    if (!contribution) {
+      throw new NotFoundException('Contribution not found');
+    }
+
+    const project = await this.projectsService.findEntityById(
+      contribution.projectId,
+    );
+    if (project.ngoId !== verifierNgoId) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    contribution.verifiedByNgo = true;
+    await this.contributionRepo.save(contribution);
+
+    const reloaded = await this.contributionRepo.findOne({
+      where: { id: contribution.id },
+      relations: ['project', 'project.ngo'],
+    });
+    return this.serializeContribution(reloaded!);
+  }
+
+  async getUserImpactSummary(userId: number): Promise<Record<string, unknown>> {
+    const contributions = await this.contributionRepo.find({
+      where: { userId },
+    });
+
+    let totalHours = 0;
+    let totalImpact = 0;
+    for (const c of contributions) {
+      totalHours += Number(c.hours);
+      totalImpact += c.impactScore;
+    }
+    const projects = new Set(contributions.map((c) => c.projectId));
 
     return {
       totalHours,
       totalImpact,
-      projectCount,
+      projectCount: projects.size,
       contributionCount: contributions.length,
     };
   }

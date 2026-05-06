@@ -19,18 +19,24 @@ export class ContributionsController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.VOLUNTEER)
-  create(@Request() req, @Body() createContributionDto: CreateContributionDto) {
-    return this.contributionsService.create(createContributionDto, req.user.userId);
+  create(
+    @Request() req: { user: { userId: string } },
+    @Body() createContributionDto: CreateContributionDto,
+  ) {
+    const uid = Number.parseInt(req.user.userId, 10);
+    return this.contributionsService.create(createContributionDto, uid);
   }
 
   @Get('my')
-  getMyContributions(@Request() req) {
-    return this.contributionsService.findByUser(req.user.userId);
+  getMyContributions(@Request() req: { user: { userId: string } }) {
+    const uid = Number.parseInt(req.user.userId, 10);
+    return this.contributionsService.findByUser(uid);
   }
 
   @Get('my/summary')
-  getMyImpactSummary(@Request() req) {
-    return this.contributionsService.getUserImpactSummary(req.user.userId);
+  getMyImpactSummary(@Request() req: { user: { userId: string } }) {
+    const uid = Number.parseInt(req.user.userId, 10);
+    return this.contributionsService.getUserImpactSummary(uid);
   }
 
   @Get('project/:projectId')
@@ -41,7 +47,11 @@ export class ContributionsController {
   @Put(':id/verify')
   @UseGuards(RolesGuard)
   @Roles(Role.NGO)
-  verify(@Param('id') id: string, @Request() req) {
-    return this.contributionsService.verify(id, req.user.userId);
+  verify(
+    @Param('id') id: string,
+    @Request() req: { user: { userId: string } },
+  ) {
+    const ngoId = Number.parseInt(req.user.userId, 10);
+    return this.contributionsService.verify(id, ngoId);
   }
 }

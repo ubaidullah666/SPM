@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
+import { NgosModule } from './ngos/ngos.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { ContributionsModule } from './contributions/contributions.module';
@@ -12,22 +13,42 @@ import { AiMatchingModule } from './ai-matching/ai-matching.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    // Use forRootAsync so ConfigModule is ready before Mongoose connects
-    MongooseModule.forRootAsync({
+    TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
-      useFactory: (configService: ConfigService) => ({
-        uri: configService.get<string>('MONGODB_URI'),
-        serverSelectionTimeoutMS: 30000,
-        socketTimeoutMS: 60000,
-        connectTimeoutMS: 30000,
-        heartbeatFrequencyMS: 10000,
-        retryWrites: true,
-        tls: true,
-        tlsAllowInvalidCertificates: false,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        const host = configService.get<string>('DATABASE_HOST', 'localhost');
+        const port = Number.parseInt(configService.get<string>('DATABASE_PORT', '5432'), 10);
+        const username = configService.get<string>('DATABASE_USER', 'postgres');
+        const password = configService.get<string>('DATABASE_PASSWORD', 'postgres');
+        const database = configService.get<string>('DATABASE_NAME', 'social_impact');
+        const synchronize =
+          configService.get<string>('DATABASE_SYNC', 'true').toLowerCase() === 'true';
+
+        if (databaseUrl) {
+          return {
+            type: 'postgres' as const,
+            url: databaseUrl,
+            autoLoadEntities: true,
+            synchronize,
+          };
+        }
+
+        return {
+          type: 'postgres' as const,
+          host,
+          port,
+          username,
+          password,
+          database,
+          autoLoadEntities: true,
+          synchronize,
+        };
+      },
       inject: [ConfigService],
     }),
     AuthModule,
+    NgosModule,
     UsersModule,
     ProjectsModule,
     ApplicationsModule,

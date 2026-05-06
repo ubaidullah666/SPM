@@ -1,122 +1,192 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, ConflictException
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Application, ApplicationDocument } from './schemas/application.schema';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ApplicationEntity } from '../entities/application.entity';
+import { UserEntity } from '../entities/user.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { ReviewApplicationDto } from './dto/review-application.dto';
 import { ProjectsService } from '../projects/projects.service';
 import { ApplicationStatus } from '../common/enums/status.enum';
+import { serializeProjectBrief } from '../common/serialize';
+import { UsersService } from '../users/users.service';
 
 @Injectable()
 export class ApplicationsService {
   constructor(
-    @InjectModel(Application.name)
-    private applicationModel: Model<ApplicationDocument>,
-    private projectsService: ProjectsService,
+    @InjectRepository(ApplicationEntity)
+    private readonly applicationRepo: Repository<ApplicationEntity>,
+    private readonly projectsService: ProjectsService,
+    private readonly usersService: UsersService,
   ) {}
+
+  private async serializeVolunteerBrief(
+    user: UserEntity,
+  ): Promise<Record<string, unknown>> {
+    const totals = await this.usersService.getImpactTotals(user.id);
+    const uid = String(user.id);
+    return {
+      _id: uid,
+      id: uid,
+      name: user.fullName,
+      email: user.email,
+      skills: user.skills ?? [],
+      impactScore: totals.impactScore,
+      totalHours: totals.totalHours,
+      avatar: user.profileImage ?? '',
+    };
+  }
 
   async apply(
     createApplicationDto: CreateApplicationDto,
-    userId: string,
-  ): Promise<ApplicationDocument> {
-    const project = await this.projectsService.findById(
-      createApplicationDto.projectId,
-    );
+    userId: number,
+  ): Promise<Record<string, unknown>> {
+    await this.projectsService.findById(createApplicationDto.projectId);
 
-    // Check if already applied
-    const existing = await this.applicationModel.findOne({
-      userId: new Types.ObjectId(userId),
-      projectId: new Types.ObjectId(createApplicationDto.projectId),
+    const projectPk = Number.parseInt(createApplicationDto.projectId, 10);
+
+    const existing = await this.applicationRepo.findOne({
+      where: { userId, projectId: projectPk },
     });
     if (existing) {
       throw new ConflictException('You have already applied to this project');
     }
 
-    const application = new this.applicationModel({
-      userId: new Types.ObjectId(userId),
-      projectId: new Types.ObjectId(createApplicationDto.projectId),
-      coverLetter: createApplicationDto.coverLetter || '',
+    const application = this.applicationRepo.create({
+      userId,
+      projectId: projectPk,
+      coverLetter: createApplicationDto.coverLetter ?? '',
+      status: 'pending',
     });
 
-    await this.projectsService.incrementApplicationCount(
-      createApplicationDto.projectId,
-    );
+    const saved = await this.applicationRepo.save(application);
+    await this.projectsService.incrementApplicationCount(projectPk);
 
-    return application.save();
+    const full = await this.loadApplication(saved.id);
+    return this.serializeVolunteerApplication(full);
   }
 
-  async findMyApplications(userId: string): Promise<ApplicationDocument[]> {
-    return this.applicationModel
-      .find({ userId: new Types.ObjectId(userId) })
-      .populate('projectId', 'title category status ngoName imageUrl')
-      .sort({ createdAt: -1 })
-      .exec();
+  private async loadApplication(id: number): Promise<ApplicationEntity> {
+    const app = await this.applicationRepo.findOne({
+      where: { id },
+      relations: ['project', 'project.ngo', 'user'],
+    });
+    if (!app) {
+      throw new NotFoundException('Application not found');
+    }
+    return app;
+  }
+
+  private serializeVolunteerApplication(
+    a: ApplicationEntity,
+  ): Record<string, unknown> {
+    const id = String(a.id);
+    return {
+      _id: id,
+      id,
+      userId: String(a.userId),
+      projectId: serializeProjectBrief(a.project),
+      status: a.status,
+      coverLetter: a.coverLetter ?? '',
+      ngoFeedback: a.reviewNote ?? '',
+      reviewedAt: a.reviewedAt,
+      createdAt: a.appliedAt,
+    };
+  }
+
+  async findMyApplications(userId: number): Promise<Record<string, unknown>[]> {
+    const rows = await this.applicationRepo.find({
+      where: { userId },
+      relations: ['project', 'project.ngo'],
+      order: { appliedAt: 'DESC' },
+    });
+    return rows.map((r) => this.serializeVolunteerApplication(r));
   }
 
   async findProjectApplications(
     projectId: string,
-    ngoId: string,
-  ): Promise<ApplicationDocument[]> {
-    const project = await this.projectsService.findById(projectId);
-    if (project.ngoId.toString() !== ngoId) {
+    ngoAccountId: number,
+  ): Promise<Record<string, unknown>[]> {
+    const project = await this.projectsService.findEntityById(
+      Number.parseInt(projectId, 10),
+    );
+    if (project.ngoId !== ngoAccountId) {
       throw new ForbiddenException('Access denied');
     }
 
-    return this.applicationModel
-      .find({ projectId: new Types.ObjectId(projectId) })
-      .populate('userId', 'name email skills impactScore totalHours avatar')
-      .sort({ createdAt: -1 })
-      .exec();
+    const rows = await this.applicationRepo.find({
+      where: { projectId: project.id },
+      relations: ['user', 'project', 'project.ngo'],
+      order: { appliedAt: 'DESC' },
+    });
+
+    const out: Record<string, unknown>[] = [];
+    for (const row of rows) {
+      const id = String(row.id);
+      out.push({
+        _id: id,
+        id,
+        userId: await this.serializeVolunteerBrief(row.user),
+        projectId: String(row.projectId),
+        status: row.status,
+        coverLetter: row.coverLetter ?? '',
+        ngoFeedback: row.reviewNote ?? '',
+        reviewedAt: row.reviewedAt,
+        createdAt: row.appliedAt,
+      });
+    }
+    return out;
   }
 
   async review(
     applicationId: string,
     reviewDto: ReviewApplicationDto,
-    ngoId: string,
-  ): Promise<ApplicationDocument> {
-    const application = await this.applicationModel
-      .findById(applicationId)
-      .populate('projectId')
-      .exec();
+    ngoAccountId: number,
+  ): Promise<Record<string, unknown>> {
+    const app = await this.applicationRepo.findOne({
+      where: { id: Number.parseInt(applicationId, 10) },
+      relations: ['project'],
+    });
 
-    if (!application) throw new NotFoundException('Application not found');
+    if (!app) {
+      throw new NotFoundException('Application not found');
+    }
 
-    const project = application.projectId as any;
-    if (project.ngoId.toString() !== ngoId) {
+    if (!app.project || app.project.ngoId !== ngoAccountId) {
       throw new ForbiddenException('Access denied');
     }
 
-    application.status = reviewDto.status;
-    application.ngoFeedback = reviewDto.ngoFeedback || '';
-    application.reviewedAt = new Date();
+    app.status = reviewDto.status;
+    app.reviewNote = reviewDto.ngoFeedback ?? '';
+    app.reviewedAt = new Date();
 
     if (reviewDto.status === ApplicationStatus.ACCEPTED) {
-      await this.projectsService.incrementAcceptedCount(project._id.toString());
+      await this.projectsService.incrementAcceptedCount(app.projectId);
     }
 
-    return application.save();
+    await this.applicationRepo.save(app);
+    const reloaded = await this.loadApplication(app.id);
+    return this.serializeVolunteerApplication(reloaded);
   }
 
-  async findById(id: string): Promise<ApplicationDocument> {
-    const app = await this.applicationModel.findById(id).exec();
-    if (!app) throw new NotFoundException('Application not found');
-    return app;
-  }
-
-  async getApplicationStats(userId: string): Promise<any> {
-    const total = await this.applicationModel.countDocuments({
-      userId: new Types.ObjectId(userId),
+  async getApplicationStats(userId: number): Promise<Record<string, number>> {
+    const total = await this.applicationRepo.count({ where: { userId } });
+    const accepted = await this.applicationRepo.count({
+      where: { userId, status: ApplicationStatus.ACCEPTED },
     });
-    const accepted = await this.applicationModel.countDocuments({
-      userId: new Types.ObjectId(userId),
-      status: ApplicationStatus.ACCEPTED,
+    const pending = await this.applicationRepo.count({
+      where: { userId, status: ApplicationStatus.PENDING },
     });
-    const pending = await this.applicationModel.countDocuments({
-      userId: new Types.ObjectId(userId),
-      status: ApplicationStatus.PENDING,
+    const rejected = await this.applicationRepo.count({
+      where: { userId, status: ApplicationStatus.REJECTED },
     });
-    return { total, accepted, pending, rejected: total - accepted - pending };
+    const withdrawn = await this.applicationRepo.count({
+      where: { userId, status: ApplicationStatus.WITHDRAWN },
+    });
+    return { total, accepted, pending, rejected, withdrawn };
   }
 }

@@ -1,13 +1,11 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { RatingsService } from './ratings.service';
 import { RatingsController } from './ratings.controller';
-import { Rating, RatingSchema } from './schemas/rating.schema';
+import { ProjectFeedbackEntity } from '../entities/project-feedback.entity';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([{ name: Rating.name, schema: RatingSchema }]),
-  ],
+  imports: [TypeOrmModule.forFeature([ProjectFeedbackEntity])],
   controllers: [RatingsController],
   providers: [RatingsService],
   exports: [RatingsService],

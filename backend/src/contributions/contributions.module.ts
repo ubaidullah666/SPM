@@ -1,17 +1,12 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ContributionsService } from './contributions.service';
 import { ContributionsController } from './contributions.controller';
-import { Contribution, ContributionSchema } from './schemas/contribution.schema';
-import { UsersModule } from '../users/users.module';
+import { ContributionEntity } from '../entities/contribution.entity';
+import { ProjectsModule } from '../projects/projects.module';
 
 @Module({
-  imports: [
-    MongooseModule.forFeature([
-      { name: Contribution.name, schema: ContributionSchema },
-    ]),
-    UsersModule,
-  ],
+  imports: [TypeOrmModule.forFeature([ContributionEntity]), ProjectsModule],
   controllers: [ContributionsController],
   providers: [ContributionsService],
   exports: [ContributionsService],

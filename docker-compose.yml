@@ -1,16 +1,17 @@
-version: '3.8'
-
 services:
-  mongodb:
-    image: mongo:7.0
-    container_name: social-impact-mongo
+  postgres:
+    image: postgres:16-alpine
+    container_name: social-impact-postgres
     restart: unless-stopped
+    # Host 5433 avoids Mac Homebrew Postgres on localhost:5432 (same port = seed hits wrong server).
     ports:
-      - "27017:27017"
+      - '5433:5432'
     volumes:
-      - mongo_data:/data/db
+      - postgres_data:/var/lib/postgresql/data
     environment:
-      MONGO_INITDB_DATABASE: social-impact
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: social_impact
 
   backend:
     build:
@@ -19,15 +20,17 @@ services:
     container_name: social-impact-backend
     restart: unless-stopped
     ports:
-      - "3001:3001"
+      - '3001:3001'
     environment:
-      MONGODB_URI: mongodb://mongodb:27017/social-impact
+      DATABASE_URL: 'postgresql://postgres:postgres@postgres:5432/social_impact'
+      DATABASE_SYNC: 'true'
       JWT_SECRET: change-this-in-production-super-secret
       JWT_EXPIRES_IN: 7d
       PORT: 3001
-      FRONTEND_URL: http://localhost:3000
+      # Must match the URL you open in the browser (default 3002 — 3000 is often busy on Mac).
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3002}
     depends_on:
-      - mongodb
+      - postgres
 
   frontend:
     build:
@@ -35,12 +38,13 @@ services:
       dockerfile: Dockerfile
     container_name: social-impact-frontend
     restart: unless-stopped
+    # Default 3002; set FRONTEND_HOST_PORT=3000 when nothing else uses 3000.
     ports:
-      - "3000:3000"
+      - '${FRONTEND_HOST_PORT:-3002}:3000'
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:3001/api
     depends_on:
       - backend
 
 volumes:
-  mongo_data:
+  postgres_data:

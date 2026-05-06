@@ -6,12 +6,13 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UsersModule } from '../users/users.module';
+import { NgosModule } from '../ngos/ngos.module';
 
 @Module({
   imports: [
     UsersModule,
+    NgosModule,
     PassportModule,
-    // registerAsync ensures ConfigModule has loaded .env before JWT reads the secret
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: (configService: ConfigService) => ({

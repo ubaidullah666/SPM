@@ -1,16 +1,16 @@
 import { Module } from '@nestjs/common';
-import { MongooseModule } from '@nestjs/mongoose';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { ApplicationsService } from './applications.service';
 import { ApplicationsController } from './applications.controller';
-import { Application, ApplicationSchema } from './schemas/application.schema';
+import { ApplicationEntity } from '../entities/application.entity';
 import { ProjectsModule } from '../projects/projects.module';
+import { UsersModule } from '../users/users.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([
-      { name: Application.name, schema: ApplicationSchema },
-    ]),
+    TypeOrmModule.forFeature([ApplicationEntity]),
     ProjectsModule,
+    UsersModule,
   ],
   controllers: [ApplicationsController],
   providers: [ApplicationsService],

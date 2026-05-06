@@ -1,56 +1,84 @@
-import { Injectable } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import { Rating, RatingDocument } from './schemas/rating.schema';
-import { CreateRatingDto } from './dto/create-rating.dto';
+import { BadRequestException, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { ProjectFeedbackEntity } from '../entities/project-feedback.entity';
+import type { CreateRatingDto } from './dto/create-rating.dto';
+import { stringId } from '../common/serialize';
 
 @Injectable()
 export class RatingsService {
   constructor(
-    @InjectModel(Rating.name) private ratingModel: Model<RatingDocument>,
+    @InjectRepository(ProjectFeedbackEntity)
+    private readonly feedbackRepo: Repository<ProjectFeedbackEntity>,
   ) {}
 
-  async create(createRatingDto: CreateRatingDto, raterId: string): Promise<RatingDocument> {
-    const rating = new this.ratingModel({
-      ...createRatingDto,
-      raterId: new Types.ObjectId(raterId),
-      ratedUserId: createRatingDto.ratedUserId
-        ? new Types.ObjectId(createRatingDto.ratedUserId)
-        : null,
-      ratedProjectId: createRatingDto.ratedProjectId
-        ? new Types.ObjectId(createRatingDto.ratedProjectId)
-        : null,
+  async create(
+    createRatingDto: CreateRatingDto,
+    raterUserId: number,
+  ): Promise<Record<string, unknown>> {
+    if (createRatingDto.type === 'project' && createRatingDto.ratedProjectId) {
+      const row = this.feedbackRepo.create({
+        projectId: Number.parseInt(createRatingDto.ratedProjectId, 10),
+        userId: raterUserId,
+        rating: createRatingDto.score,
+        comment: createRatingDto.comment ?? null,
+      });
+      const saved = await this.feedbackRepo.save(row);
+      const id = stringId(saved.id);
+      return {
+        _id: id,
+        id,
+        userId: String(saved.userId),
+        projectId: String(saved.projectId),
+        score: saved.rating,
+        comment: saved.comment ?? '',
+        type: createRatingDto.type,
+        createdAt: saved.createdAt,
+      };
+    }
+
+    throw new BadRequestException(
+      'Only project feedback is supported with the current PostgreSQL schema.',
+    );
+  }
+
+  async getProjectRatings(projectId: string): Promise<Record<string, unknown>> {
+    const pid = Number.parseInt(projectId, 10);
+    const rows = await this.feedbackRepo.find({
+      where: { projectId: pid },
+      relations: ['user'],
+      order: { createdAt: 'DESC' },
     });
-    return rating.save();
-  }
 
-  async getProjectRatings(projectId: string): Promise<any> {
-    const ratings = await this.ratingModel
-      .find({ ratedProjectId: new Types.ObjectId(projectId), type: 'project' })
-      .populate('raterId', 'name avatar')
-      .sort({ createdAt: -1 })
-      .exec();
-
-    const avg =
-      ratings.length > 0
-        ? ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length
-        : 0;
-
-    return { ratings, average: Math.round(avg * 10) / 10, count: ratings.length };
-  }
-
-  async getUserRatings(userId: string): Promise<any> {
-    const ratings = await this.ratingModel
-      .find({ ratedUserId: new Types.ObjectId(userId), type: 'volunteer' })
-      .populate('raterId', 'name avatar organizationName')
-      .sort({ createdAt: -1 })
-      .exec();
+    const ratings = rows.map((r) => {
+      const uid = stringId(r.userId);
+      return {
+        _id: stringId(r.id),
+        score: r.rating,
+        comment: r.comment ?? '',
+        raterId: {
+          _id: uid,
+          name: r.user.fullName,
+          avatar: r.user.profileImage ?? '',
+        },
+        createdAt: r.createdAt,
+      };
+    });
 
     const avg =
       ratings.length > 0
-        ? ratings.reduce((sum, r) => sum + r.score, 0) / ratings.length
+        ? ratings.reduce((sum, row) => sum + Number(row.score), 0) / ratings.length
         : 0;
 
-    return { ratings, average: Math.round(avg * 10) / 10, count: ratings.length };
+    return {
+      ratings,
+      average: Math.round(avg * 10) / 10,
+      count: ratings.length,
+    };
+  }
+
+  /** Schema has no volunteer rating table — return empty structure for portfolio. */
+  async getUserRatings(_userId: string): Promise<Record<string, unknown>> {
+    return { ratings: [], average: 0, count: 0 };
   }
 }

@@ -20,28 +20,35 @@ export class ApplicationsController {
   @Post()
   @UseGuards(RolesGuard)
   @Roles(Role.VOLUNTEER)
-  apply(@Request() req, @Body() createApplicationDto: CreateApplicationDto) {
-    return this.applicationsService.apply(createApplicationDto, req.user.userId);
+  apply(
+    @Request() req: { user: { userId: string } },
+    @Body() createApplicationDto: CreateApplicationDto,
+  ) {
+    const userId = Number.parseInt(req.user.userId, 10);
+    return this.applicationsService.apply(createApplicationDto, userId);
   }
 
   @Get('my')
-  getMyApplications(@Request() req) {
-    return this.applicationsService.findMyApplications(req.user.userId);
+  getMyApplications(@Request() req: { user: { userId: string } }) {
+    const userId = Number.parseInt(req.user.userId, 10);
+    return this.applicationsService.findMyApplications(userId);
   }
 
   @Get('my/stats')
-  getMyStats(@Request() req) {
-    return this.applicationsService.getApplicationStats(req.user.userId);
+  getMyStats(@Request() req: { user: { userId: string } }) {
+    const userId = Number.parseInt(req.user.userId, 10);
+    return this.applicationsService.getApplicationStats(userId);
   }
 
   @Get('project/:projectId')
   @UseGuards(RolesGuard)
   @Roles(Role.NGO)
-  getProjectApplications(@Param('projectId') projectId: string, @Request() req) {
-    return this.applicationsService.findProjectApplications(
-      projectId,
-      req.user.userId,
-    );
+  getProjectApplications(
+    @Param('projectId') projectId: string,
+    @Request() req: { user: { userId: string } },
+  ) {
+    const ngoId = Number.parseInt(req.user.userId, 10);
+    return this.applicationsService.findProjectApplications(projectId, ngoId);
   }
 
   @Put(':id/review')
@@ -50,8 +57,9 @@ export class ApplicationsController {
   review(
     @Param('id') id: string,
     @Body() reviewDto: ReviewApplicationDto,
-    @Request() req,
+    @Request() req: { user: { userId: string } },
   ) {
-    return this.applicationsService.review(id, reviewDto, req.user.userId);
+    const ngoId = Number.parseInt(req.user.userId, 10);
+    return this.applicationsService.review(id, reviewDto, ngoId);
   }
 }
