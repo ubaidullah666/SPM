@@ -1,0 +1,288 @@
+{
+  "info": {
+    "_postman_id": "spm-platform-api",
+    "name": "SPM Platform API Tests",
+    "description": "Complete API test collection for Social Impact Platform",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Register Volunteer",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"password\": \"Test123!\",\n  \"skills\": [\"Teaching\"],\n  \"bio\": \"Test volunteer\"\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/auth/register", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "auth", "register"]}
+          }
+        },
+        {
+          "name": "Login Volunteer",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"volunteer@demo.com\",\n  \"password\": \"demo123\"\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/auth/login", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "auth", "login"]}
+          }
+        },
+        {
+          "name": "Login NGO",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ngo@demo.com\",\n  \"password\": \"demo123\"\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/auth/login", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "auth", "login"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Projects",
+      "item": [
+        {
+          "name": "Get All Projects",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "http://localhost:3001/api/projects", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "projects"]}
+          }
+        },
+        {
+          "name": "Get Project by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "http://localhost:3001/api/projects/1", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "projects", "1"]}
+          }
+        },
+        {
+          "name": "Get Project Stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "http://localhost:3001/api/projects/stats", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "projects", "stats"]}
+          }
+        },
+        {
+          "name": "Create Project (NGO)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{ngoToken}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test Project\",\n  \"description\": \"Test description\",\n  \"category\": \"Education\",\n  \"requiredSkills\": [\"Teaching\"],\n  \"location\": \"Test Location\",\n  \"isRemote\": true,\n  \"volunteersNeeded\": 5,\n  \"estimatedHours\": 20\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/projects", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "projects"]}
+          }
+        },
+        {
+          "name": "Get My Projects (NGO)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{ngoToken}}"}],
+            "url": {"raw": "http://localhost:3001/api/projects/my-projects", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "projects", "my-projects"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Applications",
+      "item": [
+        {
+          "name": "Apply to Project (Volunteer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{volunteerToken}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"1\",\n  \"coverLetter\": \"I am interested in this project because...\"\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/applications", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "applications"]}
+          }
+        },
+        {
+          "name": "Get My Applications (Volunteer)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{volunteerToken}}"}],
+            "url": {"raw": "http://localhost:3001/api/applications/my", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "applications", "my"]}
+          }
+        },
+        {
+          "name": "Get Application Stats (Volunteer)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{volunteerToken}}"}],
+            "url": {"raw": "http://localhost:3001/api/applications/my/stats", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "applications", "my", "stats"]}
+          }
+        },
+        {
+          "name": "Get Project Applications (NGO)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{ngoToken}}"}],
+            "url": {"raw": "http://localhost:3001/api/applications/project/1", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "applications", "project", "1"]}
+          }
+        },
+        {
+          "name": "Review Application (NGO)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{ngoToken}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"accepted\",\n  \"ngoFeedback\": \"Great qualifications!\"\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/applications/1/review", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "applications", "1", "review"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Contributions",
+      "item": [
+        {
+          "name": "Create Contribution (Volunteer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{volunteerToken}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"1\",\n  \"hours\": 8,\n  \"description\": \"Taught basic literacy\",\n  \"tasksCompleted\": [\"Module 1\"]\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/contributions", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "contributions"]}
+          }
+        },
+        {
+          "name": "Get My Contributions (Volunteer)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{volunteerToken}}"}],
+            "url": {"raw": "http://localhost:3001/api/contributions/my", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "contributions", "my"]}
+          }
+        },
+        {
+          "name": "Get Impact Summary (Volunteer)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{volunteerToken}}"}],
+            "url": {"raw": "http://localhost:3001/api/contributions/my/summary", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "contributions", "my", "summary"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Ratings",
+      "item": [
+        {
+          "name": "Create Rating",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"projectId\": \"1\",\n  \"rating\": 5,\n  \"comment\": \"Excellent project!\"\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/ratings", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "ratings"]}
+          }
+        },
+        {
+          "name": "Get Project Ratings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "http://localhost:3001/api/ratings/project/1", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "ratings", "project", "1"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "6. Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {"raw": "http://localhost:3001/api/users", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "users"]}
+          }
+        },
+        {
+          "name": "Get Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {"raw": "http://localhost:3001/api/users/leaderboard", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "users", "leaderboard"]}
+          }
+        },
+        {
+          "name": "Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{token}}"}],
+            "url": {"raw": "http://localhost:3001/api/users/me", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "users", "me"]}
+          }
+        },
+        {
+          "name": "Update My Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "Authorization", "value": "Bearer {{token}}"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Updated Name\",\n  \"skills\": [\"Teaching\", \"New Skill\"],\n  \"bio\": \"Updated bio\"\n}"
+            },
+            "url": {"raw": "http://localhost:3001/api/users/me", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "users", "me"]}
+          }
+        }
+      ]
+    },
+    {
+      "name": "7. AI Matching",
+      "item": [
+        {
+          "name": "Get Project Suggestions (Volunteer)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Authorization", "value": "Bearer {{volunteerToken}}"}],
+            "url": {"raw": "http://localhost:3001/api/ai-matching/suggestions", "protocol": "http", "host": ["localhost"], "port": "3001", "path": ["api", "ai-matching", "suggestions"]}
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "volunteerToken", "value": ""},
+    {"key": "ngoToken", "value": ""},
+    {"key": "token", "value": ""}
+  ]
+}
